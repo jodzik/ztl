@@ -1,0 +1,18 @@
+menu "ZTL Zephyr tools library"
+
+config ZTL_DIGITAL_OUTPUT_MAX_COUNT
+    int "Maximum available count of digital outputs to init and use"
+    range 2 64
+    default 16
+
+config ZTL_DIGITAL_INPUT_MAX_COUNT
+    int "Maximum available count of digital inputs to init and use"
+    range 2 64
+    default 16
+
+config ZTL_DIGITAL_INPUT_MAX_SUBSCRIBERS_COUNT
+    int "Maximum subscribers on one digital input event"
+    range 2 16
+    default 4
+
+endmenu
