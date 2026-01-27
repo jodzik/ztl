@@ -34,7 +34,15 @@ static inline void call_subs(
 }
 
 static void handle_input(struct ZtlDigitalInput* const self, uint64_t const now) {
-    bool const new_state = (bool)gpio_pin_get_dt(self->gpio);
+    int rc = gpio_pin_get_dt(self->gpio);
+    if (rc < 0) {
+        LOG_ERR("handle_input: gpio_pin_get_dt() failed: %i", rc);
+        return;
+    }
+    bool new_state = (bool)rc;
+    if (self->is_invert) {
+        new_state = !new_state;
+    }
     self->tl_handling = now;
     if (new_state != self->prev_state) {
         // Handle just state change
@@ -125,6 +133,7 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
 
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != gpio, ER_INVAL);
+    ASSERT(device_is_ready(gpio->port), ER_NO_DEV);
 
     k_mutex_lock(&g_inputs_mutex, K_FOREVER);
 
@@ -303,6 +312,16 @@ int ztl_digital_input__set_clump_duration(struct ZtlDigitalInput* self, uint16_t
 
     k_mutex_lock(&g_inputs_mutex, K_FOREVER);
     self->clump_duration_ms = ms;
+    k_mutex_unlock(&g_inputs_mutex);
+
+    return 0;
+}
+
+int ztl_digital_input__set_inversion(struct ZtlDigitalInput* self, bool is_invert) {
+    ASSERT(NULL != self, ER_INVAL);
+
+    k_mutex_lock(&g_inputs_mutex, K_FOREVER);
+    self->is_invert = is_invert;
     k_mutex_unlock(&g_inputs_mutex);
 
     return 0;

@@ -37,7 +37,7 @@ static inline int set_output(struct ZtlDigitalOutput* const output, bool const s
 static int handle_output(struct ZtlDigitalOutput* const self, int64_t const now) {
     uint16_t const period = self->pulse_state ? self->pulse_on_ms : self->pulse_period_ms - self->pulse_on_ms;
 
-    if (0 != self->pulse_count && IS_TIME_EXPIRED_EX(self->tl_pulse_ms, period, now)) {
+    if (0 != self->pulse_count && is_period_expired_ex(self->tl_pulse_ms, period, now)) {
         self->tl_pulse_ms = now;
         if (!self->pulse_state) {
             // Full cycle has been completed
@@ -76,6 +76,7 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
 
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != gpio, ER_INVAL);
+    ASSERT(device_is_ready(gpio->port), ER_NO_DEV);
 
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
@@ -92,7 +93,7 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
             self->gpio = gpio;
             self->pulse_period_ms = DEFAULT_PULSE_PERIOD_MS;
             self->pulse_on_ms = DEFAULT_BLINK_ON_MS;
-            TRY_EX(gpio_pin_configure_dt(self->gpio, GPIO_OUTPUT));
+            TRY_EX(gpio_pin_configure_dt(self->gpio, GPIO_OUTPUT_INACTIVE));
             TRY_EX(gpio_pin_set_dt(gpio, self->state));
             rc = 0;
             break;
@@ -125,7 +126,7 @@ int ztl_digital_output__set(struct ZtlDigitalOutput* const self, bool const stat
     return rc;
 }
 
-int ztl_digital_output__start_blink(struct ZtlDigitalOutput* const self, int const pulse_count) {
+int ztl_digital_output__start_pulse(struct ZtlDigitalOutput* const self, int const pulse_count) {
     int rc = 0;
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
@@ -143,7 +144,7 @@ int ztl_digital_output__start_blink(struct ZtlDigitalOutput* const self, int con
     return rc;
 }
 
-int ztl_digital_output__config_blink(struct ZtlDigitalOutput* const self, uint16_t const pulse_period_ms, uint16_t const pulse_on_ms) {
+int ztl_digital_output__config_pulse(struct ZtlDigitalOutput* const self, uint16_t const pulse_period_ms, uint16_t const pulse_on_ms) {
     int rc = 0;
 
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
@@ -162,7 +163,7 @@ int ztl_digital_output__config_blink(struct ZtlDigitalOutput* const self, uint16
     return rc;
 }
 
-int ztl_digital_output__stop_blink(struct ZtlDigitalOutput* const self) {
+int ztl_digital_output__stop_pulse(struct ZtlDigitalOutput* const self) {
     int rc = 0;
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 

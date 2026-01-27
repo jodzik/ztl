@@ -53,6 +53,7 @@ typedef struct ZtlDigitalInput {
     uint16_t clump_duration_ms;
     enum ZtlLevel active_level;
     struct ZtlDigitalInputCallbackDescriptor callback_descriptors[CONFIG_ZTL_DIGITAL_INPUT_MAX_SUBSCRIBERS_COUNT];
+    bool is_invert;
 
     bool prev_state;
     bool prev_state_debounced;
@@ -75,6 +76,7 @@ int ztl_digital_input__wait_state_debounced(struct ZtlDigitalInput* self, bool s
 int ztl_digital_input__is_state_changed_debounced(struct ZtlDigitalInput* self, bool* is_changed, bool* state);
 int ztl_digital_input__set_debounce_duration(struct ZtlDigitalInput* self, uint16_t ms);
 int ztl_digital_input__set_clump_duration(struct ZtlDigitalInput* self, uint16_t ms);
+int ztl_digital_input__set_inversion(struct ZtlDigitalInput* self, bool is_invert);
 int ztl_digital_input__state_to_level(struct ZtlDigitalInput const* self, bool state, enum ZtlLevel* level);
 
 int ztl_digital_input__subscribe(
