@@ -15,4 +15,19 @@ config ZTL_DIGITAL_INPUT_MAX_SUBSCRIBERS_COUNT
     range 2 16
     default 4
 
+config ZTL_COMMON_WORKQUEUE_STACK_SIZE
+    int "Common work queue stack size"
+    range 128 65535
+    default 4096
+
+config ZTL_COMMON_WORKQUEUE_PRIO
+    int "Common work queue thread priority"
+    range 0 15
+    default 5
+
+config ZTL_COMMON_WORKQUEUE_TIMEOUT_MS
+    int "Common work queue timeout ms for one work"
+    range 10 10000
+    default 1000
+
 endmenu
