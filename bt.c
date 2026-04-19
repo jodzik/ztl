@@ -46,13 +46,26 @@ static void disconnected(struct bt_conn *disconn, uint8_t reason)
         bt_conn_unref(g_ble_conn);
         g_ble_conn = NULL;
     }
-    
+
     LOG_INF("Disconnected, reason %u %s", reason, bt_hci_err_to_str(reason));
+}
+
+static void recycled(void) {
+    int rc = 0;
+    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, ARRAY_SIZE(g_advertise_data), NULL, 0);
+    if (rc) {
+        LOG_ERR("Advertising failed to start (err %d)", rc);
+        atomic_set(&g_bt_status, BT_STATUS__FAIL);
+    } else {
+        atomic_set(&g_bt_status, BT_STATUS__OK);
+        LOG_INF("Configuration mode: waiting connections...");
+    }
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
     .connected = connected,
     .disconnected = disconnected,
+    .recycled = recycled,
 };
 
 static void bt_ready(int err)
@@ -107,6 +120,8 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
     }
 
     ASSERT(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
+
+    LOG_INF("Init.");
 
     return 0;
 }
