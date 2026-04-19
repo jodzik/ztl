@@ -12,11 +12,21 @@ int ztl_common_workqueue__submit(struct k_work* work) {
 }
 
 int ztl_common_workqueue__schedule(struct k_work_delayable* dwork, k_timeout_t delay) {
-    return k_work_schedule_for_queue(&g_common_workqueue, dwork, delay);
+    int const check = k_work_schedule_for_queue(&g_common_workqueue, dwork, delay);
+    if (check >= 0) {
+        return 0;
+    } else {
+        return check;
+    }
 }
 
 int ztl_common_workqueue__reschedule(struct k_work_delayable* dwork, k_timeout_t delay) {
-    return k_work_reschedule_for_queue(&g_common_workqueue, dwork, delay);
+    int const check = k_work_reschedule_for_queue(&g_common_workqueue, dwork, delay);
+    if (check >= 0) {
+        return 0;
+    } else {
+        return check;
+    }
 }
 
 int _ztl_common_workqueue__init(void) {
