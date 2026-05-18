@@ -30,4 +30,9 @@ config ZTL_COMMON_WORKQUEUE_TIMEOUT_MS
     range 10 10000
     default 1000
 
+config ZTL_BT_EVENT_BASE
+    int "ZTL events base"
+    range 0 254
+    default 128
+
 endmenu

@@ -1,10 +1,12 @@
 #include "bt.h"
 
 #include <safe-c/safe_c.h>
+#include <event-c/event.h>
 
 #include <zephyr/sys/atomic.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/settings/settings.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,28 +28,19 @@ static struct bt_data g_advertise_data[3] = {0};
 /// `enum BtStatus`
 static atomic_t g_bt_status = ATOMIC_INIT(BT_STATUS__NOT_INIT);
 
-static struct bt_conn *g_ble_conn = NULL;
-
-static void connected(struct bt_conn *connected, uint8_t err)
-{
+static void connected(struct bt_conn* const conn, uint8_t err) {
     if (err) {
         LOG_ERR("Connection failed (err %u)", err);
     } else {
         LOG_INF("Connected");
-        if (!g_ble_conn) {
-            g_ble_conn = bt_conn_ref(connected);
-        }
+        event__pub(ZTL_BT_EVENT__CONNECTED, bt_conn_ref(conn));
     }
 }
 
-static void disconnected(struct bt_conn *disconn, uint8_t reason)
-{
-    if (g_ble_conn) {
-        bt_conn_unref(g_ble_conn);
-        g_ble_conn = NULL;
-    }
-
+static void disconnected(struct bt_conn* const conn, uint8_t reason) {
     LOG_INF("Disconnected, reason %u %s", reason, bt_hci_err_to_str(reason));
+    event__pub(ZTL_BT_EVENT__DISCONNECTED, conn);
+    bt_conn_unref(conn);
 }
 
 static void recycled(void) {
@@ -58,7 +51,7 @@ static void recycled(void) {
         atomic_set(&g_bt_status, BT_STATUS__FAIL);
     } else {
         atomic_set(&g_bt_status, BT_STATUS__OK);
-        LOG_INF("Configuration mode: waiting connections...");
+        LOG_INF("Mode: waiting connections...");
     }
 }
 
@@ -87,10 +80,11 @@ static void bt_ready(int err)
 
     atomic_set(&g_bt_status, BT_STATUS__OK);
 
-    LOG_INF("Configuration mode: waiting connections...");
+    LOG_INF("Mode: waiting connections...");
 }
 
 int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size) {
+    int rc = 0;
     size_t const device_name_len = strlen(device_name);
 
     ASSERT(device_name_len < sizeof(g_device_name_buf), ER_INVAL);
@@ -113,24 +107,21 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
     }
 
     atomic_set(&g_bt_status, BT_STATUS__INITIALIZE);
-    TRY(bt_enable(bt_ready));
+    TRY_EX(bt_enable(bt_ready));
 
     while (BT_STATUS__INITIALIZE == atomic_get(&g_bt_status)) {
         k_msleep(1);
     }
 
-    ASSERT(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
+    ASSERT_EX(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
 
     LOG_INF("Init.");
 
-    return 0;
-}
+ finally:
 
-int ztl_bt__connection(struct bt_conn** connection) {
-    ASSERT(NULL != connection, ER_INVAL);
-    ASSERT(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
-
-    *connection = g_ble_conn;
+    if (0 != rc) {
+        atomic_set(&g_bt_status, BT_STATUS__FAIL);
+    }
 
     return 0;
 }
