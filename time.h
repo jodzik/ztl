@@ -7,6 +7,7 @@
 
 typedef int64_t millis_t;
 typedef int32_t interval_ms_t;
+typedef uint64_t unix_timestamp_t;
 
 static inline bool is_period_expired(millis_t tle, interval_ms_t period) {
     millis_t const now = k_uptime_get();
