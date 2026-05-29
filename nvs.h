@@ -3,7 +3,7 @@
 
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
-#include <zephyr/fs/nvs.h>
+#include <zephyr/kvss/nvs.h>
 
 enum {
     ZTL_NVS_RING_MAX_EXTENT = UINT16_MAX - 1,
@@ -19,7 +19,7 @@ typedef struct ZtlNvsRing {
 int ztl_nvs__init_manual(struct nvs_fs* fs, struct device const* flash_device, off_t offset, uint32_t size);
 
 #define ztl_nvs__init(fs, partition) ztl_nvs__init_manual(fs, \
-    FIXED_PARTITION_DEVICE(partition), FIXED_PARTITION_OFFSET(partition), FIXED_PARTITION_SIZE(partition))
+    PARTITION_DEVICE(partition), PARTITION_OFFSET(partition), PARTITION_SIZE(partition))
 
 int ztl_nvs_ring__init_manual(
     struct ZtlNvsRing* nvs_ring,
@@ -29,7 +29,7 @@ int ztl_nvs_ring__init_manual(
     uint32_t size);
 
 #define ztl_nvs_ring__init(nvs_ring, extent, partition) ztl_nvs_ring__init_manual(nvs_ring, extent, \
-    FIXED_PARTITION_DEVICE(partition), FIXED_PARTITION_OFFSET(partition), FIXED_PARTITION_SIZE(partition))
+    PARTITION_DEVICE(partition), PARTITION_OFFSET(partition), PARTITION_SIZE(partition))
 
 /// @brief Get element from ring nvs buffer.
 /// @param nvs_ring[in] - nvs ring buffer.
