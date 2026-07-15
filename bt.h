@@ -4,11 +4,19 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <zephyr/zbus/zbus.h>
 
-enum ZtlBtEvents {
-    ZTL_BT_EVENT__CONNECTED = CONFIG_ZTL_BT_EVENT_BASE + 1,  // bt_conn*
-    ZTL_BT_EVENT__DISCONNECTED = CONFIG_ZTL_BT_EVENT_BASE + 2,   // bt_conn*
+enum ZtlBtEventType {
+    ZTL_BT_EVENT__CONNECTED,
+    ZTL_BT_EVENT__DISCONNECTED,
 };
+
+struct ZtlBtEvent {
+    enum ZtlBtEventType type;
+    struct bt_conn* conn;
+};
+
+ZBUS_CHAN_DECLARE(ztl_bt_chan);
 
 int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size);
 

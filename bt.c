@@ -1,18 +1,20 @@
 #include "bt.h"
 
 #include <safe-c/safe_c.h>
-#include <event-c/event.h>
 
 #include <zephyr/sys/atomic.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/zbus/zbus.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
 LOG_MODULE_REGISTER(ztl_bt);
+
+ZBUS_CHAN_DEFINE(ztl_bt_chan, struct ZtlBtEvent, NULL, NULL, ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT());
 
 enum BtStatus {
     BT_STATUS__NOT_INIT = 0,
@@ -33,13 +35,21 @@ static void connected(struct bt_conn* const conn, uint8_t err) {
         LOG_ERR("Connection failed (err %u)", err);
     } else {
         LOG_INF("Connected");
-        event__pub(ZTL_BT_EVENT__CONNECTED, bt_conn_ref(conn));
+        struct ZtlBtEvent event = {
+            .type = ZTL_BT_EVENT__CONNECTED,
+            .conn = bt_conn_ref(conn),
+        };
+        zbus_chan_pub(&ztl_bt_chan, &event, K_FOREVER);
     }
 }
 
 static void disconnected(struct bt_conn* const conn, uint8_t reason) {
     LOG_INF("Disconnected, reason %u %s", reason, bt_hci_err_to_str(reason));
-    event__pub(ZTL_BT_EVENT__DISCONNECTED, conn);
+    struct ZtlBtEvent event = {
+        .type = ZTL_BT_EVENT__DISCONNECTED,
+        .conn = conn,
+    };
+    zbus_chan_pub(&ztl_bt_chan, &event, K_FOREVER);
     bt_conn_unref(conn);
 }
 

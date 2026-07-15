@@ -1,5 +1,5 @@
 #include "digital_input.h"
-#include "time.h"
+#include "ztl_time.h"
 
 #include <lib/safe-c/safe_c.h>
 
@@ -7,9 +7,6 @@
 
 enum {
     DEFAULT_DEBOUNCE_DURATION_MS = 100,
-    THREAD_STACK_SIZE = 512,
-    THREAD_LOOP_SLEEP_US = 1000,
-    THREAD_PRIO = 3,
 };
 
 LOG_MODULE_REGISTER(ztl_digital_input);
@@ -17,11 +14,8 @@ LOG_MODULE_REGISTER(ztl_digital_input);
 static struct ZtlDigitalInput* g_inputs[CONFIG_ZTL_DIGITAL_INPUT_MAX_COUNT] = {0};
 K_MUTEX_DEFINE(g_inputs_mutex);
 
-static void input_handler(void*, void*, void*);
-
-K_THREAD_DEFINE(input_handler_tid, THREAD_STACK_SIZE,
-                input_handler, NULL, NULL, NULL,
-                THREAD_PRIO, 0, 0);
+static struct k_work_delayable g_input_work;
+static void input_work_handler(struct k_work* work);
 
 static inline void call_subs(
     struct ZtlDigitalInput* const self,
@@ -107,18 +101,16 @@ static void handle_input(struct ZtlDigitalInput* const self, uint64_t const now)
     }
 }
 
-static void input_handler(void* arg1, void* arg2, void* arg3) {
-    while (true) {
-        k_mutex_lock(&g_inputs_mutex, K_FOREVER);
-        uint64_t const now = (uint64_t)k_uptime_get();
-        for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT; i++) {
-            if (g_inputs[i] && g_inputs[i]->tl_handling != now) {
-                handle_input(g_inputs[i], now);
-            }
+static void input_work_handler(struct k_work* work) {
+    k_mutex_lock(&g_inputs_mutex, K_FOREVER);
+    uint64_t const now = (uint64_t)k_uptime_get();
+    for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_INPUT_MAX_COUNT; i++) {
+        if (g_inputs[i] && g_inputs[i]->tl_handling != now) {
+            handle_input(g_inputs[i], now);
         }
-        k_mutex_unlock(&g_inputs_mutex);
-        k_usleep(THREAD_LOOP_SLEEP_US);
     }
+    k_mutex_unlock(&g_inputs_mutex);
+    k_work_schedule(&g_input_work, K_MSEC(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS));
 }
 
 static void handle_if_needed(struct ZtlDigitalInput* const self) {
@@ -130,6 +122,7 @@ static void handle_if_needed(struct ZtlDigitalInput* const self) {
 
 int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_spec const* gpio) {
     int rc = ER_NO_MEM;
+    bool is_first_init = false;
 
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != gpio, ER_INVAL);
@@ -146,6 +139,9 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
     for (int i = 0; i < CONFIG_ZTL_DIGITAL_INPUT_MAX_COUNT; i++) {
         if (NULL == g_inputs[i]) {
             gpio_flags_t gpio_cfg = 0;
+            if (i == 0 && g_inputs[0] == NULL) {
+                is_first_init = true;
+            }
             g_inputs[i] = self;
             memset(self, 0, sizeof(*self));
             self->gpio = gpio;
@@ -165,6 +161,11 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
  finally:
 
     k_mutex_unlock(&g_inputs_mutex);
+
+    if (rc == 0 && is_first_init) {
+        k_work_init_delayable(&g_input_work, input_work_handler);
+        k_work_schedule(&g_input_work, K_MSEC(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS));
+    }
 
     return rc;
 }
@@ -192,7 +193,7 @@ int ztl_digital_input__wait_state(struct ZtlDigitalInput* self, bool const state
             break;
         }
         k_mutex_unlock(&g_inputs_mutex);
-        k_usleep(THREAD_LOOP_SLEEP_US);
+        k_msleep(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS);
     }
 
     return 0;
@@ -274,7 +275,7 @@ int ztl_digital_input__wait_state_debounced(struct ZtlDigitalInput* self, bool c
             break;
         }
         k_mutex_unlock(&g_inputs_mutex);
-        k_usleep(THREAD_LOOP_SLEEP_US);
+        k_msleep(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS);
     }
 
     return 0;

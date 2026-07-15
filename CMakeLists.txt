@@ -1,5 +1,18 @@
-cmake_minimum_required(VERSION 3.28)
+zephyr_library()
 
-project(ztl)
+zephyr_library_sources(
+    digital_output.c
+    digital_input.c
+    sensor.c
+    nvs.c
+    bt.c
+    common_workqueue.c
+    init.c
+)
 
-target_sources(app PRIVATE digital_output.c digital_input.c sensor.c nvs.c bt.c common_workqueue.c init.c)
+zephyr_library_include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../safe-c
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../..
+)

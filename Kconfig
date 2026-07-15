@@ -1,5 +1,10 @@
 menu "ZTL Zephyr tools library"
 
+config ZTL
+    bool "ZTL library"
+    default y
+    select ZBUS
+
 config ZTL_DIGITAL_OUTPUT_MAX_COUNT
     int "Maximum available count of digital outputs to init and use"
     range 2 64
@@ -30,9 +35,14 @@ config ZTL_COMMON_WORKQUEUE_TIMEOUT_MS
     range 10 10000
     default 1000
 
-config ZTL_BT_EVENT_BASE
-    int "ZTL events base"
-    range 0 254
-    default 128
+config ZTL_DIGITAL_INPUT_POLL_PERIOD_MS
+    int "Digital input poll period in milliseconds"
+    range 1 1000
+    default 2
+
+config ZTL_DIGITAL_OUTPUT_POLL_PERIOD_MS
+    int "Digital output poll period in milliseconds"
+    range 1 1000
+    default 2
 
 endmenu

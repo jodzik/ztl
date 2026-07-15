@@ -1,5 +1,5 @@
 #include "digital_output.h"
-#include "time.h"
+#include "ztl_time.h"
 
 #include <lib/safe-c/safe_c.h>
 
@@ -9,9 +9,6 @@
 enum {
     DEFAULT_PULSE_PERIOD_MS = 500,
     DEFAULT_BLINK_ON_MS = DEFAULT_PULSE_PERIOD_MS / 2,
-    THREAD_LOOP_SLEEP_MS = 1,
-    THREAD_STACK_SIZE = 512,
-    THREAD_PRIO = 3,
 };
 
 LOG_MODULE_REGISTER(ztl_digital_output);
@@ -19,11 +16,8 @@ LOG_MODULE_REGISTER(ztl_digital_output);
 static struct ZtlDigitalOutput* g_outputs[CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT] = {0};
 K_MUTEX_DEFINE(g_outputs_mutex);
 
-static void output_handler(void*, void*, void*);
-
-K_THREAD_DEFINE(output_handler_tid, THREAD_STACK_SIZE,
-                output_handler, NULL, NULL, NULL,
-                THREAD_PRIO, 0, 0);
+static struct k_work_delayable g_output_work;
+static void output_work_handler(struct k_work* work);
 
 static inline int set_output(struct ZtlDigitalOutput* const output, bool const state) {
     if (state != output->hw_state) {
@@ -56,23 +50,22 @@ static int handle_output(struct ZtlDigitalOutput* const self, int64_t const now)
     return 0;
 }
 
-static void output_handler(void* arg1, void* arg2, void* arg3) {
-    while (true) {
-        k_mutex_lock(&g_outputs_mutex, K_FOREVER);
-        int64_t const now = k_uptime_get();
-        for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT; i++) {
-            if (g_outputs[i]) {
-                TRY_PASS(handle_output(g_outputs[i], now));
-            }
+static void output_work_handler(struct k_work* work) {
+    k_mutex_lock(&g_outputs_mutex, K_FOREVER);
+    int64_t const now = k_uptime_get();
+    for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT; i++) {
+        if (g_outputs[i]) {
+            TRY_PASS(handle_output(g_outputs[i], now));
         }
-        k_mutex_unlock(&g_outputs_mutex);
-        k_msleep(THREAD_LOOP_SLEEP_MS);
     }
+    k_mutex_unlock(&g_outputs_mutex);
+    k_work_schedule(&g_output_work, K_MSEC(CONFIG_ZTL_DIGITAL_OUTPUT_POLL_PERIOD_MS));
 }
 
 
 int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt_spec const* const gpio) {
     int rc = ER_NO_MEM;
+    bool is_first_init = false;
 
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != gpio, ER_INVAL);
@@ -88,6 +81,9 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
 
     for (int i = 0; i < CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT; i++) {
         if (NULL == g_outputs[i]) {
+            if (i == 0 && g_outputs[0] == NULL) {
+                is_first_init = true;
+            }
             g_outputs[i] = self;
             memset(self, 0, sizeof(*self));
             self->gpio = gpio;
@@ -103,6 +99,11 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
  finally:
 
     k_mutex_unlock(&g_outputs_mutex);
+
+    if (rc == 0 && is_first_init) {
+        k_work_init_delayable(&g_output_work, output_work_handler);
+        k_work_schedule(&g_output_work, K_MSEC(CONFIG_ZTL_DIGITAL_OUTPUT_POLL_PERIOD_MS));
+    }
 
     return rc;
 }
