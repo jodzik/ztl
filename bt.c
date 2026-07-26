@@ -14,7 +14,7 @@
 
 LOG_MODULE_REGISTER(ztl_bt);
 
-ZBUS_CHAN_DEFINE(ztl_bt_chan, struct ZtlBtEvent, NULL, NULL, ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT());
+ZBUS_CHAN_DEFINE(e_ztl_bt_chan, struct ZtlBtEvent, NULL, NULL, ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT());
 
 enum BtStatus {
     BT_STATUS__NOT_INIT = 0,
@@ -39,7 +39,7 @@ static void connected(struct bt_conn* const conn, uint8_t err) {
             .type = ZTL_BT_EVENT__CONNECTED,
             .conn = bt_conn_ref(conn),
         };
-        zbus_chan_pub(&ztl_bt_chan, &event, K_FOREVER);
+        zbus_chan_pub(&e_ztl_bt_chan, &event, K_FOREVER);
     }
 }
 
@@ -49,7 +49,7 @@ static void disconnected(struct bt_conn* const conn, uint8_t reason) {
         .type = ZTL_BT_EVENT__DISCONNECTED,
         .conn = conn,
     };
-    zbus_chan_pub(&ztl_bt_chan, &event, K_FOREVER);
+    zbus_chan_pub(&e_ztl_bt_chan, &event, K_FOREVER);
     bt_conn_unref(conn);
 }
 
@@ -117,13 +117,13 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
     }
 
     atomic_set(&g_bt_status, BT_STATUS__INITIALIZE);
-    TRY_EX(bt_enable(bt_ready));
+    TRY(bt_enable(bt_ready));
 
     while (BT_STATUS__INITIALIZE == atomic_get(&g_bt_status)) {
         k_msleep(1);
     }
 
-    ASSERT_EX(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
+    ASSERT(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
 
     LOG_INF("Init.");
 

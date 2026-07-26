@@ -20,15 +20,18 @@ static struct k_work_delayable g_output_work;
 static void output_work_handler(struct k_work* work);
 
 static inline int set_output(struct ZtlDigitalOutput* const output, bool const state) {
+    int rc = 0;
     if (state != output->hw_state) {
         output->hw_state = state;
         TRY(gpio_pin_set_dt(output->gpio, output->hw_state));
     }
 
-    return 0;
+ finally:
+    return rc;
 }
 
 static int handle_output(struct ZtlDigitalOutput* const self, int64_t const now) {
+    int rc = 0;
     uint16_t const period = self->pulse_state ? self->pulse_on_ms : self->pulse_period_ms - self->pulse_on_ms;
 
     if (0 != self->pulse_count && is_period_expired_ex(self->tl_pulse_ms, period, now)) {
@@ -39,7 +42,7 @@ static int handle_output(struct ZtlDigitalOutput* const self, int64_t const now)
                 self->pulse_count--;
                 if (0 == self->pulse_count) {
                     TRY(set_output(self, self->state));
-                    return 0;
+                    goto finally;
                 }
             }
         }
@@ -47,7 +50,8 @@ static int handle_output(struct ZtlDigitalOutput* const self, int64_t const now)
         TRY(set_output(self, self->pulse_state));
     }
 
-    return 0;
+ finally:
+    return rc;
 }
 
 static void output_work_handler(struct k_work* work) {
@@ -75,7 +79,7 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
 
     for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_OUTPUT_MAX_COUNT; i++) {
         if (g_outputs[i]) {
-            ASSERT_EX(!(g_outputs[i]->gpio->port == gpio->port && g_outputs[i]->gpio->pin == gpio->pin), ER_ALREADY);
+            ASSERT(!(g_outputs[i]->gpio->port == gpio->port && g_outputs[i]->gpio->pin == gpio->pin), ER_ALREADY);
         }
     }
 
@@ -89,8 +93,8 @@ int ztl_digital_output__init(struct ZtlDigitalOutput* const self, struct gpio_dt
             self->gpio = gpio;
             self->pulse_period_ms = DEFAULT_PULSE_PERIOD_MS;
             self->pulse_on_ms = DEFAULT_BLINK_ON_MS;
-            TRY_EX(gpio_pin_configure_dt(self->gpio, GPIO_OUTPUT_INACTIVE));
-            TRY_EX(gpio_pin_set_dt(gpio, self->state));
+            TRY(gpio_pin_configure_dt(self->gpio, GPIO_OUTPUT_INACTIVE));
+            TRY(gpio_pin_set_dt(gpio, self->state));
             rc = 0;
             break;
         }
@@ -112,7 +116,7 @@ int ztl_digital_output__set(struct ZtlDigitalOutput* const self, bool const stat
     int rc = 0;
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
-    ASSERT_EX(NULL != self, ER_INVAL);
+    ASSERT(NULL != self, ER_INVAL);
 
     if (0 == self->pulse_count) {
         TRY(set_output(self, state));
@@ -131,12 +135,12 @@ int ztl_digital_output__start_pulse(struct ZtlDigitalOutput* const self, int con
     int rc = 0;
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
-    ASSERT_EX(NULL != self, ER_INVAL);
+    ASSERT(NULL != self, ER_INVAL);
 
     self->pulse_count = pulse_count;
     self->pulse_state = true;
     self->tl_pulse_ms = k_uptime_get();
-    TRY_EX(set_output(self, self->pulse_state));
+    TRY(set_output(self, self->pulse_state));
 
  finally:
 
@@ -150,9 +154,9 @@ int ztl_digital_output__config_pulse(struct ZtlDigitalOutput* const self, uint16
 
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
-    ASSERT_EX(NULL != self, ER_INVAL);
-    ASSERT_EX(pulse_on_ms > 0, ER_INVAL);
-    ASSERT_EX(pulse_on_ms < pulse_period_ms, ER_INVAL);
+    ASSERT(NULL != self, ER_INVAL);
+    ASSERT(pulse_on_ms > 0, ER_INVAL);
+    ASSERT(pulse_on_ms < pulse_period_ms, ER_INVAL);
 
     self->pulse_period_ms = pulse_period_ms;
     self->pulse_on_ms = pulse_on_ms;
@@ -168,10 +172,10 @@ int ztl_digital_output__stop_pulse(struct ZtlDigitalOutput* const self) {
     int rc = 0;
     k_mutex_lock(&g_outputs_mutex, K_FOREVER);
 
-    ASSERT_EX(NULL != self, ER_INVAL);
+    ASSERT(NULL != self, ER_INVAL);
 
     self->pulse_count = 0;
-    TRY_EX(set_output(self, self->state));
+    TRY(set_output(self, self->state));
 
  finally:
 

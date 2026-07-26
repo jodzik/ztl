@@ -5,7 +5,9 @@
 LOG_MODULE_REGISTER(ztl);
 
 int ztl__init(void) {
+    int rc = 0;
     TRY(_ztl_common_workqueue__init());
     LOG_INF("Init.");
-    return 0;
+ finally:
+    return rc;
 }

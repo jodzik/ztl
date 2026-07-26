@@ -132,7 +132,7 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
 
     for (uint8_t i = 0; i < CONFIG_ZTL_DIGITAL_INPUT_MAX_COUNT; i++) {
         if (g_inputs[i]) {
-            ASSERT_EX(!(g_inputs[i]->gpio->port == gpio->port && g_inputs[i]->gpio->pin == gpio->pin), ER_ALREADY);
+            ASSERT(!(g_inputs[i]->gpio->port == gpio->port && g_inputs[i]->gpio->pin == gpio->pin), ER_ALREADY);
         }
     }
 
@@ -146,13 +146,13 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
             memset(self, 0, sizeof(*self));
             self->gpio = gpio;
             self->debounce_duration_ms = DEFAULT_DEBOUNCE_DURATION_MS;
-            TRY_EX(gpio_pin_get_config_dt(self->gpio, &gpio_cfg));
+            TRY(gpio_pin_get_config_dt(self->gpio, &gpio_cfg));
             if (gpio_cfg & GPIO_ACTIVE_HIGH) {
                 self->active_level = ZTL_LEVEL__HIGH;
             } else {
                 self->active_level = ZTL_LEVEL__LOW;
             }
-            TRY_EX(gpio_pin_configure_dt(self->gpio, GPIO_INPUT));
+            TRY(gpio_pin_configure_dt(self->gpio, GPIO_INPUT));
             rc = 0;
             break;
         }
@@ -171,6 +171,7 @@ int ztl_digital_input__init(struct ZtlDigitalInput* const self, struct gpio_dt_s
 }
 
 int ztl_digital_input__state(struct ZtlDigitalInput* self, bool* state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
 
@@ -179,10 +180,12 @@ int ztl_digital_input__state(struct ZtlDigitalInput* self, bool* state) {
     *state = self->prev_state;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__wait_state(struct ZtlDigitalInput* self, bool const state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
 
     while (true) {
@@ -196,10 +199,12 @@ int ztl_digital_input__wait_state(struct ZtlDigitalInput* self, bool const state
         k_msleep(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS);
     }
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__is_state_changed(struct ZtlDigitalInput* self, bool* is_changed, bool* state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != is_changed, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
@@ -211,10 +216,12 @@ int ztl_digital_input__is_state_changed(struct ZtlDigitalInput* self, bool* is_c
     *state = self->prev_state;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__state_duration(struct ZtlDigitalInput* const self, bool* state, uint64_t* duration_ms) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
     ASSERT(NULL != duration_ms, ER_INVAL);
@@ -225,10 +232,12 @@ int ztl_digital_input__state_duration(struct ZtlDigitalInput* const self, bool* 
     *duration_ms = (uint64_t)k_uptime_get() - self->tl_state_change;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__state_debounced(struct ZtlDigitalInput* self, bool* state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
 
@@ -237,10 +246,12 @@ int ztl_digital_input__state_debounced(struct ZtlDigitalInput* self, bool* state
     *state = self->prev_state_debounced;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__state_button(struct ZtlDigitalInput* self, enum ZtlButtonState* state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
 
@@ -261,10 +272,12 @@ int ztl_digital_input__state_button(struct ZtlDigitalInput* self, enum ZtlButton
 
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__wait_state_debounced(struct ZtlDigitalInput* self, bool const state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
 
     while (true) {
@@ -278,10 +291,12 @@ int ztl_digital_input__wait_state_debounced(struct ZtlDigitalInput* self, bool c
         k_msleep(CONFIG_ZTL_DIGITAL_INPUT_POLL_PERIOD_MS);
     }
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__is_state_changed_debounced(struct ZtlDigitalInput* self, bool* is_changed, bool* state) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != is_changed, ER_INVAL);
     ASSERT(NULL != state, ER_INVAL);
@@ -293,10 +308,12 @@ int ztl_digital_input__is_state_changed_debounced(struct ZtlDigitalInput* self, 
     *state = self->prev_state_debounced;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__set_debounce_duration(struct ZtlDigitalInput* self, uint16_t ms) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(ms > 0, ER_INVAL);
 
@@ -304,10 +321,12 @@ int ztl_digital_input__set_debounce_duration(struct ZtlDigitalInput* self, uint1
     self->debounce_duration_ms = ms;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__set_clump_duration(struct ZtlDigitalInput* self, uint16_t ms) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(ms > 0, ER_INVAL);
 
@@ -315,20 +334,24 @@ int ztl_digital_input__set_clump_duration(struct ZtlDigitalInput* self, uint16_t
     self->clump_duration_ms = ms;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__set_inversion(struct ZtlDigitalInput* self, bool is_invert) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
 
     k_mutex_lock(&g_inputs_mutex, K_FOREVER);
     self->is_invert = is_invert;
     k_mutex_unlock(&g_inputs_mutex);
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__state_to_level(struct ZtlDigitalInput const* self, bool state, enum ZtlLevel* level) {
+    int rc = 0;
     ASSERT(NULL != self, ER_INVAL);
     ASSERT(NULL != level, ER_INVAL);
 
@@ -338,7 +361,8 @@ int ztl_digital_input__state_to_level(struct ZtlDigitalInput const* self, bool s
         *level = ztl_digital__invert_level(self->active_level);
     }
 
-    return 0;
+ finally:
+    return rc;
 }
 
 int ztl_digital_input__subscribe(
@@ -363,7 +387,7 @@ int ztl_digital_input__subscribe(
         }
     }
 
-    ASSERT_EX(is_found_free, ER_NO_MEM);
+    ASSERT(is_found_free, ER_NO_MEM);
 
  finally:
 
