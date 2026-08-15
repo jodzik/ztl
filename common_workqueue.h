@@ -1,3 +1,7 @@
+/** @file Another one workqueue for works with very low priority.
+ * Handlers of this work may has execute time up to 1 second.   
+ */
+
 #ifndef ZTL_COMMON_WORKQUEUE_H_
 #define ZTL_COMMON_WORKQUEUE_H_
 
