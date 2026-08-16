@@ -45,4 +45,14 @@ config ZTL_DIGITAL_OUTPUT_POLL_PERIOD_MS
     range 1 1000
     default 2
 
+config ZTL_BT_UUID_MANUFACTURE_PART
+    hex "Bluetooth base uuid manufacturer part, 8 bytes"
+    default 0x0000000000000000
+    range 0x0000000000000000 0xFFFFFFFFFFFFFFFF
+
+config ZTL_BT_UUID_DEVICE_PART
+    hex "Bluetooth base uuid device part, 6 bytes"
+    default 0x000000000000
+    range 0x000000000000 0xFFFFFFFFFFFF
+
 endmenu
