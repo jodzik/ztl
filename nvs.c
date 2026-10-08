@@ -48,7 +48,7 @@ int ztl_nvs_ring__init_manual(
 {
     int rc = 0;
     struct NvsRingServiceRecord service_rec = {0};
-    memset(nvs_read, 0, sizeof(*nvs_ring));
+    memset(nvs_ring, 0, sizeof(*nvs_ring));
     TRY(ztl_nvs__init_manual(&nvs_ring->fs, flash_device, offset, size));
 
     nvs_ring->extent = extent;
