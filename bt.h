@@ -31,6 +31,7 @@ struct ZtlBtEvent {
 
 ZBUS_CHAN_DECLARE(e_ztl_bt_chan);
 
-int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size);
+int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size)
+__nonnull((1));
 
 #endif // ZTL_BT_H_

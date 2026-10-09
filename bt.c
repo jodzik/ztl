@@ -26,6 +26,7 @@ enum BtStatus {
 static char g_device_name_buf[32] = {0};
 static uint8_t g_manufacture_data_buf[32] = {0};
 static struct bt_data g_advertise_data[3] = {0};
+static uint8_t g_advertise_data_count = 0;
 
 /// `enum BtStatus`
 static atomic_t g_bt_status = ATOMIC_INIT(BT_STATUS__NOT_INIT);
@@ -55,7 +56,7 @@ static void disconnected(struct bt_conn* const conn, uint8_t reason) {
 
 static void recycled(void) {
     int rc = 0;
-    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, ARRAY_SIZE(g_advertise_data), NULL, 0);
+    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count, NULL, 0);
     if (rc) {
         LOG_ERR("Advertising failed to start (err %d)", rc);
         atomic_set(&g_bt_status, BT_STATUS__FAIL);
@@ -73,7 +74,6 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 
 static void bt_ready(int err)
 {
-    int rc = 0;
     if (err) {
         LOG_ERR("Bluetooth init failed (err %d)", err);
         atomic_set(&g_bt_status, BT_STATUS__FAIL);
@@ -81,28 +81,25 @@ static void bt_ready(int err)
     }
     LOG_INF("Bluetooth initialized");
 
-    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, ARRAY_SIZE(g_advertise_data), NULL, 0);
-    if (rc) {
-        LOG_ERR("Advertising failed to start (err %d)", rc);
-        atomic_set(&g_bt_status, BT_STATUS__FAIL);
-        return;
-    }
-
     atomic_set(&g_bt_status, BT_STATUS__OK);
-
-    LOG_INF("Mode: waiting connections...");
 }
 
 int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size) {
+    enum {
+        MAX_LEGACY_ADVERTISE_DATA_SIZE = 31,
+    };
+
     int rc = 0;
     size_t const device_name_len = strlen(device_name);
 
     ASSERT(device_name_len < sizeof(g_device_name_buf), ER_INVAL);
     ASSERT(manufacture_data_size <= sizeof(g_manufacture_data_buf), ER_INVAL);
+    ASSERTf(device_name_len + manufacture_data_size <= MAX_LEGACY_ADVERTISE_DATA_SIZE, ER_INVAL,
+        "device_name_len(%zu) + manufacture_data_size(%zu) is greater than max legacy advertise payload size(%i)",
+        device_name_len, manufacture_data_size, MAX_LEGACY_ADVERTISE_DATA_SIZE);
 
     {
         strlcpy(g_device_name_buf, device_name, sizeof(g_device_name_buf));
-        memcpy(g_manufacture_data_buf, manufacture_data, manufacture_data_size);
 
         struct bt_data const flags = BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR));
         g_advertise_data[0] = flags;
@@ -110,10 +107,15 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
         struct bt_data const name = BT_DATA(BT_DATA_NAME_COMPLETE, g_device_name_buf, device_name_len);
         g_advertise_data[1] = name;
 
+        g_advertise_data_count = 2;
+    }
+
+    if (NULL != manufacture_data) {
+        memcpy(g_manufacture_data_buf, manufacture_data, manufacture_data_size);
+
         struct bt_data const manuf = BT_DATA(BT_DATA_MANUFACTURER_DATA, g_manufacture_data_buf, manufacture_data_size);
         g_advertise_data[2] = manuf;
-
-        static_assert(3 == ARRAY_SIZE(g_advertise_data), "3 == ARRAY_SIZE(g_advertise_data)");
+        g_advertise_data_count = 3;
     }
 
     atomic_set(&g_bt_status, BT_STATUS__INITIALIZE);
@@ -125,7 +127,14 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
 
     ASSERT(BT_STATUS__OK == atomic_get(&g_bt_status), ER_NO_DEV);
 
-    LOG_INF("Init.");
+    /* Load settings after bt_enable(): the "bt" tree creates or restores the
+     * identity address and finalizes BT init, so advertising can start. */
+    TRY(settings_load());
+
+    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count, NULL, 0);
+    ASSERTf(0 == rc, rc, "Advertising failed to start (err %d)", rc);
+
+    LOG_INF("Mode: waiting connections...");
 
  finally:
 
@@ -133,5 +142,5 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
         atomic_set(&g_bt_status, BT_STATUS__FAIL);
     }
 
-    return 0;
+    return rc;
 }
