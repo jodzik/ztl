@@ -2,6 +2,7 @@
 
 #include <safe-c/safe_c.h>
 
+#include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
@@ -23,6 +24,17 @@ enum BtStatus {
     BT_STATUS__FAIL = 3,
 };
 
+enum {
+    /* Ask the central to encrypt the link only if it has not done so by
+     * itself. BlueZ answers an early security request with Pairing Failed
+     * 0x5 when it holds no bond (host tools remove bonds before connecting)
+     * and flags the peer as failed-authentication - that state later makes
+     * bluetoothd drop the whole connection after re-pairing. Centrals that
+     * pair by themselves (host tools via explicit pair(), Android) finish
+     * within about a second, so wait before requesting. */
+    SECURITY_REQUEST_DELAY_MS = 1500,
+};
+
 static char g_device_name_buf[32] = {0};
 static uint8_t g_manufacture_data_buf[32] = {0};
 static struct bt_data g_advertise_data[3] = {0};
@@ -31,11 +43,59 @@ static uint8_t g_advertise_data_count = 0;
 /// `enum BtStatus`
 static atomic_t g_bt_status = ATOMIC_INIT(BT_STATUS__NOT_INIT);
 
+static void _security_request_work_handler(struct k_work* const work);
+
+static K_MUTEX_DEFINE(g_security_request_mutex);
+static K_WORK_DELAYABLE_DEFINE(g_security_request_work, _security_request_work_handler);
+/// Connection waiting for its delayed security request, NULL when none.
+static struct bt_conn* g_security_request_conn = NULL;
+
+/* Runs in the system workqueue SECURITY_REQUEST_DELAY_MS after connect: ask
+ * the central to encrypt the link unless it already did. */
+static void _security_request_work_handler(struct k_work* const work) {
+    struct bt_conn* conn = NULL;
+
+    k_mutex_lock(&g_security_request_mutex, K_FOREVER);
+    conn = g_security_request_conn;
+    g_security_request_conn = NULL;
+    k_mutex_unlock(&g_security_request_mutex);
+
+    if (NULL == conn) {
+        return;
+    }
+
+    if (bt_conn_get_security(conn) < BT_SECURITY_L2) {
+        int const rc = bt_conn_set_security(conn, BT_SECURITY_L2);
+        if (rc) {
+            LOG_ERR("Security request failed (err %d)", rc);
+        }
+    }
+
+    bt_conn_unref(conn);
+}
+
+/* See SECURITY_REQUEST_DELAY_MS. Holds a connection reference until the
+ * request work fires (or the link drops). */
+static void _schedule_security_request(struct bt_conn* const conn) {
+    struct bt_conn* stale = NULL;
+
+    k_mutex_lock(&g_security_request_mutex, K_FOREVER);
+    stale = g_security_request_conn;
+    g_security_request_conn = bt_conn_ref(conn);
+    k_work_reschedule(&g_security_request_work, K_MSEC(SECURITY_REQUEST_DELAY_MS));
+    k_mutex_unlock(&g_security_request_mutex);
+
+    if (NULL != stale) {
+        bt_conn_unref(stale);
+    }
+}
+
 static void connected(struct bt_conn* const conn, uint8_t err) {
     if (err) {
         LOG_ERR("Connection failed (err %u)", err);
     } else {
         LOG_INF("Connected");
+        _schedule_security_request(conn);
         struct ZtlBtEvent event = {
             .type = ZTL_BT_EVENT__CONNECTED,
             .conn = bt_conn_ref(conn),
@@ -45,7 +105,20 @@ static void connected(struct bt_conn* const conn, uint8_t err) {
 }
 
 static void disconnected(struct bt_conn* const conn, uint8_t reason) {
+    struct bt_conn* pending = NULL;
+
     LOG_INF("Disconnected, reason %u %s", reason, bt_hci_err_to_str(reason));
+
+    k_mutex_lock(&g_security_request_mutex, K_FOREVER);
+    if (conn == g_security_request_conn) {
+        pending = g_security_request_conn;
+        g_security_request_conn = NULL;
+    }
+    k_mutex_unlock(&g_security_request_mutex);
+    if (NULL != pending) {
+        bt_conn_unref(pending);
+    }
+
     struct ZtlBtEvent event = {
         .type = ZTL_BT_EVENT__DISCONNECTED,
         .conn = conn,
