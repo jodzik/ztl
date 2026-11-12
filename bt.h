@@ -31,7 +31,15 @@ struct ZtlBtEvent {
 
 ZBUS_CHAN_DECLARE(e_ztl_bt_chan);
 
-int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size)
+/// @param device_name advertised device name (mandatory).
+/// @param service_uuid when not NULL, advertised in the primary ADV packet
+///     (`BT_DATA_UUID128_ALL`); the name (and manufacture data) move to the
+///     scan response. When NULL, the name (and manufacture data) go to the
+///     primary ADV packet and the scan response stays empty.
+/// @param manufacture_data optional manufacturer-specific data payload.
+/// @param manufacture_data_size size of @p manufacture_data, bytes.
+int ztl_bt__init(char const* device_name, struct bt_uuid_128 const* service_uuid,
+    uint8_t const* manufacture_data, size_t const manufacture_data_size)
 __nonnull((1));
 
 #endif // ZTL_BT_H_

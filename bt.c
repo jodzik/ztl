@@ -39,6 +39,8 @@ static char g_device_name_buf[32] = {0};
 static uint8_t g_manufacture_data_buf[32] = {0};
 static struct bt_data g_advertise_data[3] = {0};
 static uint8_t g_advertise_data_count = 0;
+static struct bt_data g_scan_response_data[2] = {0};
+static uint8_t g_scan_response_count = 0;
 
 /// `enum BtStatus`
 static atomic_t g_bt_status = ATOMIC_INIT(BT_STATUS__NOT_INIT);
@@ -129,7 +131,8 @@ static void disconnected(struct bt_conn* const conn, uint8_t reason) {
 
 static void recycled(void) {
     int rc = 0;
-    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count, NULL, 0);
+    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count,
+        g_scan_response_data, g_scan_response_count);
     if (rc) {
         LOG_ERR("Advertising failed to start (err %d)", rc);
         atomic_set(&g_bt_status, BT_STATUS__FAIL);
@@ -157,7 +160,8 @@ static void bt_ready(int err)
     atomic_set(&g_bt_status, BT_STATUS__OK);
 }
 
-int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_t const manufacture_data_size) {
+int ztl_bt__init(char const* device_name, struct bt_uuid_128 const* service_uuid,
+    uint8_t const* manufacture_data, size_t const manufacture_data_size) {
     enum {
         MAX_LEGACY_ADVERTISE_DATA_SIZE = 31,
     };
@@ -167,28 +171,52 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
 
     ASSERT(device_name_len < sizeof(g_device_name_buf), ER_INVAL);
     ASSERT(manufacture_data_size <= sizeof(g_manufacture_data_buf), ER_INVAL);
-    ASSERTf(device_name_len + manufacture_data_size <= MAX_LEGACY_ADVERTISE_DATA_SIZE, ER_INVAL,
-        "device_name_len(%zu) + manufacture_data_size(%zu) is greater than max legacy advertise payload size(%i)",
-        device_name_len, manufacture_data_size, MAX_LEGACY_ADVERTISE_DATA_SIZE);
 
-    {
-        strlcpy(g_device_name_buf, device_name, sizeof(g_device_name_buf));
+    strlcpy(g_device_name_buf, device_name, sizeof(g_device_name_buf));
 
-        struct bt_data const flags = BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR));
+    struct bt_data const flags = BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR));
+    struct bt_data const name = BT_DATA(BT_DATA_NAME_COMPLETE, g_device_name_buf, device_name_len);
+
+    if (NULL != service_uuid) {
+        size_t const scan_response_size = 2 + device_name_len
+            + ((NULL != manufacture_data) ? 2 + manufacture_data_size : 0);
+
+        ASSERTf(scan_response_size <= MAX_LEGACY_ADVERTISE_DATA_SIZE, ER_INVAL,
+            "scan_response_size(%zu) is greater than max legacy advertise payload size(%i)",
+            scan_response_size, MAX_LEGACY_ADVERTISE_DATA_SIZE);
+
         g_advertise_data[0] = flags;
-
-        struct bt_data const name = BT_DATA(BT_DATA_NAME_COMPLETE, g_device_name_buf, device_name_len);
-        g_advertise_data[1] = name;
-
+        struct bt_data const uuid = BT_DATA(BT_DATA_UUID128_ALL, service_uuid->val, BT_UUID_SIZE_128);
+        g_advertise_data[1] = uuid;
         g_advertise_data_count = 2;
-    }
 
-    if (NULL != manufacture_data) {
-        memcpy(g_manufacture_data_buf, manufacture_data, manufacture_data_size);
+        g_scan_response_data[0] = name;
+        g_scan_response_count = 1;
 
-        struct bt_data const manuf = BT_DATA(BT_DATA_MANUFACTURER_DATA, g_manufacture_data_buf, manufacture_data_size);
-        g_advertise_data[2] = manuf;
-        g_advertise_data_count = 3;
+        if (NULL != manufacture_data) {
+            memcpy(g_manufacture_data_buf, manufacture_data, manufacture_data_size);
+
+            struct bt_data const manuf = BT_DATA(BT_DATA_MANUFACTURER_DATA, g_manufacture_data_buf, manufacture_data_size);
+            g_scan_response_data[1] = manuf;
+            g_scan_response_count = 2;
+        }
+    } else {
+        ASSERTf(device_name_len + manufacture_data_size <= MAX_LEGACY_ADVERTISE_DATA_SIZE, ER_INVAL,
+            "device_name_len(%zu) + manufacture_data_size(%zu) is greater than max legacy advertise payload size(%i)",
+            device_name_len, manufacture_data_size, MAX_LEGACY_ADVERTISE_DATA_SIZE);
+
+        g_advertise_data[0] = flags;
+        g_advertise_data[1] = name;
+        g_advertise_data_count = 2;
+        g_scan_response_count = 0;
+
+        if (NULL != manufacture_data) {
+            memcpy(g_manufacture_data_buf, manufacture_data, manufacture_data_size);
+
+            struct bt_data const manuf = BT_DATA(BT_DATA_MANUFACTURER_DATA, g_manufacture_data_buf, manufacture_data_size);
+            g_advertise_data[2] = manuf;
+            g_advertise_data_count = 3;
+        }
     }
 
     atomic_set(&g_bt_status, BT_STATUS__INITIALIZE);
@@ -204,7 +232,8 @@ int ztl_bt__init(char const* device_name, uint8_t const* manufacture_data, size_
      * identity address and finalizes BT init, so advertising can start. */
     TRY(settings_load());
 
-    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count, NULL, 0);
+    rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, g_advertise_data, g_advertise_data_count,
+        g_scan_response_data, g_scan_response_count);
     ASSERTf(0 == rc, rc, "Advertising failed to start (err %d)", rc);
 
     LOG_INF("Mode: waiting connections...");
